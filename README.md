@@ -6,6 +6,22 @@ The rationale for this utility was to be able to process a file, such as extract
 
 **It is important to note that if the process is interrupted, the file will be left in an inconsistent state due to the truncating algorithm. There is no way to recover from this state.**
 
+## Installation
+
+Requires a C99 compiler.
+
+```bash
+git clone https://github.com/Yen/rmcat
+cd rmcat
+sudo make install
+```
+
+## Usage
+
+```bash
+rmcat [FILE]
+```
+
 ## Implementation
 
 The utility makes use of `ftruncate` system call to shrink the size of the file as it reads it. As `ftruncate` can only shrink a file from the end, but want to process the file from the beginning, the data for the file needs to be reversed on-disk in some way. The way this is achieved is by reading a chunk the start of the file, writing it to stdout, then replacing it with a chunk from the end of the file after which the file is truncated. Once we have walked the whole file, roughly half the file has been written to stdout with the other half now in chunk-wise reverse order at the start of the file. We can then read chunks from the end of the file (undoing this chunk-wise reverse) and write it to stdout while truncating.
