@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
         printf("Usage: rmcat [FILE]\n");
         printf("Writes FILE to standard output, truncating the file as it is read.\n");
         printf("Copyright (C) 2025 George Bott (https://github.com/Yen/rmcat)\n");
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
     // Open the file for reading and writing.
