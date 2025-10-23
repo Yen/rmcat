@@ -29,7 +29,7 @@ void try_write_exact(int fd, char *buffer, size_t count, off_t offset) {
     size_t total_written = 0;
     while (total_written < count) {
         ssize_t c = pwrite(fd, buffer + total_written, count - total_written, offset + total_written);
-        if (c < 0) {
+        if (c <= 0) {
             perror("rmcat: pwrite");
             exit(EXIT_FAILURE);
         }
@@ -42,7 +42,7 @@ void try_write_to_stdout(char *buffer, size_t count) {
     size_t total_written = 0;
     while (total_written < count) {
         ssize_t c = write(STDOUT_FILENO, buffer + total_written, count - total_written);
-        if (c < 0) {
+        if (c <= 0) {
             perror("rmcat: write to stdout");
             exit(EXIT_FAILURE);
         }
