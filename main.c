@@ -1,13 +1,13 @@
 #define _XOPEN_SOURCE 500
 
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-// TODO: Allow the chunk size to be specified as a command line argument.
-#define CHUNK_SIZE (1024 * 1024 * 64)
+#define MIN_CHUNK_SIZE 1024
 
 // Reads exactly count bytes from the file at the given offset.
 void try_read_exact(int fd, char *buffer, size_t count, off_t offset) {
@@ -57,6 +57,29 @@ void try_truncate(int fd, off_t length) {
     }
 }
 
+// Calculate a chunk size of `max(MIN_CHUNK_SIZE, min(file_size/100, system_memory/100))
+size_t try_calculate_chunk_size(size_t file_size) {
+    // Get the system memory.
+    struct sysinfo si;
+    if (sysinfo(&si) < 0) {
+        perror("rmcat: sysinfo");
+        exit(EXIT_FAILURE);
+    }
+
+    size_t system_memory = si.totalram * si.mem_unit;
+
+    size_t chunk_size;
+    if (file_size < system_memory) {
+        chunk_size = file_size / 100;
+    } else {
+        chunk_size = system_memory / 100;
+    }
+    if (chunk_size < MIN_CHUNK_SIZE) {
+        chunk_size = MIN_CHUNK_SIZE;
+    }
+    return chunk_size;
+}
+
 int main(int argc, char *argv[])
 {
     // Check we have the correct number of arguments.
@@ -87,17 +110,20 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     size_t file_size = (size_t)st.st_size;
+    
+    // Calculate the chunk size to use.
+    size_t chunk_size = try_calculate_chunk_size(file_size);
 
     // Calculate the number of chunks and the size of the final chunk.
-    ssize_t last_chunk = file_size / CHUNK_SIZE;
-    size_t final_chunk_size = file_size % CHUNK_SIZE;
+    ssize_t last_chunk = file_size / chunk_size;
+    size_t final_chunk_size = file_size % chunk_size;
     if (final_chunk_size == 0) {
         last_chunk -= 1;
-        final_chunk_size = CHUNK_SIZE;
+        final_chunk_size = chunk_size;
     }
 
     // Allocate the buffer for reading chunks.
-    char *buffer = malloc(CHUNK_SIZE);
+    char *buffer = malloc(chunk_size);
     if (buffer == NULL) {
         perror("rmcat: malloc");
         exit(EXIT_FAILURE);
@@ -111,21 +137,21 @@ int main(int argc, char *argv[])
     ssize_t next_chunk = 0;
     while (next_chunk < last_chunk) {
         // Read the next chunk.
-        try_read_exact(fd, buffer, CHUNK_SIZE, next_chunk * CHUNK_SIZE);
+        try_read_exact(fd, buffer, chunk_size, next_chunk * chunk_size);
         // Write the next chunk to stdout.
-        try_write_to_stdout(buffer, CHUNK_SIZE);
+        try_write_to_stdout(buffer, chunk_size);
 
         // If we are on the first chunk at the start, then we are on the last chunk at the end,
         // so make sure we are using the final chunk size.
-        size_t last_chunk_size = next_chunk == 0 ? final_chunk_size : CHUNK_SIZE;
+        size_t last_chunk_size = next_chunk == 0 ? final_chunk_size : chunk_size;
 
         // Read the last chunk.
-        try_read_exact(fd, buffer, last_chunk_size, last_chunk * CHUNK_SIZE);
+        try_read_exact(fd, buffer, last_chunk_size, last_chunk * chunk_size);
         // Write the last chunk to where the next chunk was written.
-        try_write_exact(fd, buffer, last_chunk_size, next_chunk * CHUNK_SIZE);
+        try_write_exact(fd, buffer, last_chunk_size, next_chunk * chunk_size);
         
         // Truncate the file to remove unnecessary data.
-        try_truncate(fd, last_chunk * CHUNK_SIZE);
+        try_truncate(fd, last_chunk * chunk_size);
 
         next_chunk++;
         last_chunk--;
@@ -137,15 +163,15 @@ int main(int argc, char *argv[])
     while (last_chunk >= 0) {
         // If we are on the first chunk at the start, then this is our last chunk
         // as the chunks are reversed, so make sure we are using the final chunk size.
-        size_t last_chunk_size = last_chunk == 0 ? final_chunk_size : CHUNK_SIZE;
+        size_t last_chunk_size = last_chunk == 0 ? final_chunk_size : chunk_size;
 
         // Read the last chunk.
-        try_read_exact(fd, buffer, last_chunk_size, last_chunk * CHUNK_SIZE);
+        try_read_exact(fd, buffer, last_chunk_size, last_chunk * chunk_size);
         // Write the last chunk to stdout.
         try_write_to_stdout(buffer, last_chunk_size);
 
         // Truncate the file to remove unnecessary data.
-        try_truncate(fd, last_chunk * CHUNK_SIZE);
+        try_truncate(fd, last_chunk * chunk_size);
         
         last_chunk--;
     }
